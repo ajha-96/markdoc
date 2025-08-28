@@ -1,0 +1,308 @@
+/* See the Tailwind configuration guide for advanced usage
+   https://tailwindcss.com/docs/configuration */
+
+@import "tailwindcss" source(none);
+@source "../css";
+@source "../js";
+@source "../../lib/markdoc_web";
+
+/* A Tailwind plugin that makes "hero-#{ICON}" classes available.
+   The heroicons installation itself is managed by your mix.exs */
+@plugin "../vendor/heroicons";
+
+/* daisyUI Tailwind Plugin. You can update this file by fetching the latest version with:
+   curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.js
+   Make sure to look at the daisyUI changelog: https://daisyui.com/docs/changelog/ */
+@plugin "../vendor/daisyui" {
+  themes: false;
+}
+
+/* daisyUI theme plugin. You can update this file by fetching the latest version with:
+  curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.js
+  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
+  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
+@plugin "../vendor/daisyui-theme" {
+  name: "dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: "dark";
+  --color-base-100: oklch(30.33% 0.016 252.42);
+  --color-base-200: oklch(25.26% 0.014 253.1);
+  --color-base-300: oklch(20.15% 0.012 254.09);
+  --color-base-content: oklch(97.807% 0.029 256.847);
+  --color-primary: oklch(58% 0.233 277.117);
+  --color-primary-content: oklch(96% 0.018 272.314);
+  --color-secondary: oklch(58% 0.233 277.117);
+  --color-secondary-content: oklch(96% 0.018 272.314);
+  --color-accent: oklch(60% 0.25 292.717);
+  --color-accent-content: oklch(96% 0.016 293.756);
+  --color-neutral: oklch(37% 0.044 257.287);
+  --color-neutral-content: oklch(98% 0.003 247.858);
+  --color-info: oklch(58% 0.158 241.966);
+  --color-info-content: oklch(97% 0.013 236.62);
+  --color-success: oklch(60% 0.118 184.704);
+  --color-success-content: oklch(98% 0.014 180.72);
+  --color-warning: oklch(66% 0.179 58.318);
+  --color-warning-content: oklch(98% 0.022 95.277);
+  --color-error: oklch(58% 0.253 17.585);
+  --color-error-content: oklch(96% 0.015 12.422);
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+
+@plugin "../vendor/daisyui-theme" {
+  name: "light";
+  default: true;
+  prefersdark: false;
+  color-scheme: "light";
+  --color-base-100: oklch(98% 0 0);
+  --color-base-200: oklch(96% 0.001 286.375);
+  --color-base-300: oklch(92% 0.004 286.32);
+  --color-base-content: oklch(21% 0.006 285.885);
+  --color-primary: oklch(70% 0.213 47.604);
+  --color-primary-content: oklch(98% 0.016 73.684);
+  --color-secondary: oklch(55% 0.027 264.364);
+  --color-secondary-content: oklch(98% 0.002 247.839);
+  --color-accent: oklch(0% 0 0);
+  --color-accent-content: oklch(100% 0 0);
+  --color-neutral: oklch(44% 0.017 285.786);
+  --color-neutral-content: oklch(98% 0 0);
+  --color-info: oklch(62% 0.214 259.815);
+  --color-info-content: oklch(97% 0.014 254.604);
+  --color-success: oklch(70% 0.14 182.503);
+  --color-success-content: oklch(98% 0.014 180.72);
+  --color-warning: oklch(66% 0.179 58.318);
+  --color-warning-content: oklch(98% 0.022 95.277);
+  --color-error: oklch(58% 0.253 17.585);
+  --color-error-content: oklch(96% 0.015 12.422);
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* Add variants based on LiveView classes */
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+/* Use the data attribute for dark mode  */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Make LiveView wrapper divs transparent for layout */
+[data-phx-session], [data-phx-teleported-src] { display: contents }
+
+/* This file is for your main application CSS */
+
+/* Real-time Collaborative Cursor Animations */
+@keyframes cursorBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
+
+@keyframes cursorPulse {
+  0% { 
+    transform: scale(1);
+    box-shadow: 0 0 4px currentColor;
+  }
+  50% { 
+    transform: scale(1.05);
+    box-shadow: 0 0 8px currentColor;
+  }
+  100% { 
+    transform: scale(1);
+    box-shadow: 0 0 4px currentColor;
+  }
+}
+
+@keyframes labelFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes selectionGlow {
+  0%, 100% { box-shadow: 0 0 3px currentColor; }
+  50% { box-shadow: 0 0 8px currentColor; }
+}
+
+@keyframes typingDots {
+  0%, 20% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-3px); opacity: 1; }
+  100% { transform: translateY(0); opacity: 0.4; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Cursor Classes */
+.collaborative-cursor {
+  animation: cursorBlink 1.5s ease-in-out infinite;
+  transition: all 0.15s ease-out;
+}
+
+.collaborative-cursor.typing {
+  animation: cursorPulse 1s ease-in-out infinite;
+}
+
+.collaborative-cursor-label {
+  animation: fadeInUp 0.3s ease-out;
+  backdrop-filter: blur(8px);
+}
+
+.collaborative-cursor-label.typing {
+  animation: labelFloat 2s ease-in-out infinite;
+}
+
+.collaborative-selection {
+  animation: fadeInUp 0.2s ease-out;
+}
+
+.collaborative-selection.active {
+  animation: selectionGlow 2s ease-in-out infinite;
+}
+
+/* User presence indicators */
+.user-presence-indicator {
+  transition: all 0.2s ease-out;
+}
+
+.user-presence-indicator:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* Markdown Preview Styles */
+.markdown-preview {
+  line-height: 1.8;
+  color: #374151;
+}
+
+.markdown-preview h1 {
+  @apply text-3xl font-bold text-gray-900 mt-8 mb-6 border-b border-gray-200 pb-3;
+}
+
+.markdown-preview h2 {
+  @apply text-2xl font-semibold text-gray-800 mt-6 mb-4 border-b border-gray-100 pb-2;
+}
+
+.markdown-preview h3 {
+  @apply text-xl font-semibold text-gray-800 mt-5 mb-3;
+}
+
+.markdown-preview h4 {
+  @apply text-lg font-medium text-gray-800 mt-4 mb-2;
+}
+
+.markdown-preview h5,
+.markdown-preview h6 {
+  @apply text-base font-medium text-gray-800 mt-3 mb-2;
+}
+
+.markdown-preview p {
+  @apply mb-4 text-gray-700 leading-relaxed;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  @apply mb-4 pl-6 space-y-2;
+}
+
+.markdown-preview ul li {
+  @apply relative;
+  list-style: none;
+}
+
+.markdown-preview ul li::before {
+  content: "•";
+  @apply absolute -left-4 text-blue-500 font-bold;
+}
+
+.markdown-preview ol li {
+  @apply relative;
+  list-style: decimal;
+  margin-left: 1rem;
+}
+
+.markdown-preview blockquote {
+  @apply border-l-4 border-blue-200 bg-blue-50 pl-4 py-2 my-4 italic text-gray-600;
+}
+
+.markdown-preview code {
+  @apply bg-gray-100 text-red-600 px-2 py-1 rounded text-sm font-mono;
+}
+
+.markdown-preview pre {
+  @apply bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto mb-4;
+}
+
+.markdown-preview pre code {
+  @apply bg-transparent text-inherit p-0 rounded-none;
+}
+
+.markdown-preview table {
+  @apply w-full border-collapse border border-gray-300 mb-4;
+}
+
+.markdown-preview th {
+  @apply bg-gray-100 border border-gray-300 px-4 py-2 text-left font-semibold;
+}
+
+.markdown-preview td {
+  @apply border border-gray-300 px-4 py-2;
+}
+
+.markdown-preview a {
+  @apply text-blue-600 hover:text-blue-800 underline;
+}
+
+.markdown-preview img {
+  @apply max-w-full h-auto rounded-lg shadow-md my-4;
+}
+
+.markdown-preview hr {
+  @apply border-gray-300 my-8;
+}
+
+/* Code syntax highlighting */
+.markdown-preview .highlight {
+  @apply bg-gray-900 rounded-lg p-4 overflow-x-auto;
+}
+
+.markdown-preview .highlight code {
+  @apply text-gray-100;
+}
+
+/* Task lists */
+.markdown-preview input[type="checkbox"] {
+  @apply mr-2;
+}
+
+.markdown-preview .task-list-item {
+  list-style: none;
+}
+
+/* Split pane resizer */
+.split-resizer {
+  @apply w-1 bg-gray-300 hover:bg-blue-400 cursor-col-resize transition-colors duration-150;
+}
+
+.split-resizer:hover {
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.3);
+}
