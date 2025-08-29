@@ -202,8 +202,8 @@ defmodule Markdoc.Documents.DocumentManager do
   @impl true
   def handle_call({:update_content, new_content}, _from, document) do
     updated_document = Document.update_content(document, new_content)
-    # Don't broadcast content updates - Phoenix Channels handle text sync
-    # broadcast_content_updated(updated_document)
+    # Content updates are handled exclusively by Phoenix Channels
+    # No PubSub broadcasts for content changes to avoid conflicts
     {:reply, :ok, updated_document}
   end
 
@@ -372,7 +372,7 @@ defmodule Markdoc.Documents.DocumentManager do
     )
   end
 
-  # Removed broadcast_content_updated - Phoenix Channels handle text sync
+  # Content updates handled exclusively by Phoenix Channels - no PubSub broadcasts
 
   defp broadcast_cursor_updated(document, session_id) do
     case document.users[session_id] do

@@ -41,8 +41,25 @@ export class CollaborativeEditor {
   }
   
   setupSocket() {
-    // Create Phoenix socket connection
-    this.socket = new Socket("/socket", {});
+    // Create Phoenix socket connection with error handling
+    this.socket = new Socket("/socket", {
+      logger: (kind, msg, data) => {
+        if (kind === "error") {
+          console.error("🔌 Socket error:", msg, data);
+        }
+      },
+      reconnectAfterMs: (tries) => {
+        return [1000, 2000, 5000, 10000][tries - 1] || 10000;
+      }
+    });
+    
+    this.socket.onError(() => {
+      console.error("🔌 Socket connection error");
+    });
+    
+    this.socket.onClose(() => {
+      console.warn("🔌 Socket connection closed");
+    });
     
     this.socket.connect();
     
@@ -85,6 +102,19 @@ export class CollaborativeEditor {
       })
       .receive("error", (resp) => {
         console.error("❌ Unable to join document channel", resp);
+        // Attempt to reconnect after a delay
+        setTimeout(() => {
+          console.log("🔄 Attempting to rejoin channel...");
+          this.startCollaboration();
+        }, 2000);
+      })
+      .receive("timeout", () => {
+        console.error("⏰ Channel join timed out");
+        // Attempt to reconnect after a delay
+        setTimeout(() => {
+          console.log("🔄 Retrying channel join after timeout...");
+          this.startCollaboration();
+        }, 3000);
       });
   }
   
@@ -131,23 +161,10 @@ export class CollaborativeEditor {
     
     console.log("✅ Initial state sync completed");
     
-    // Start periodic sync to prevent content drift
-    this.startPeriodicSync();
+    // Content sync now handled exclusively by Phoenix Channels
   }
   
-  startPeriodicSync() {
-    // Sync every 10 seconds to prevent content drift
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-    }
-    
-    this.syncInterval = setInterval(() => {
-      if (this.channel) {
-        console.log("🔄 Periodic sync check");
-        this.requestSync();
-      }
-    }, 10000); // More frequent syncing
-  }
+  // Removed periodic sync - Phoenix Channels provide reliable real-time updates
   
   setupEventListeners() {
     // Content changes
@@ -188,20 +205,25 @@ export class CollaborativeEditor {
   }
   
   handleLocalInput(e) {
-    const newContent = this.editor.value;
-    const operation = this.detectOperation(this.content, newContent);
-    
-    if (operation) {
-      // Apply operation locally
-      this.content = newContent;
-      this.localOperations.push(operation);
+    try {
+      const newContent = this.editor.value || '';
+      const operation = this.detectOperation(this.content || '', newContent);
       
-      // Send to server
-      this.sendOperation(operation);
-      
-      // Update typing status
-      this.setTypingStatus(true);
-      this.scheduleTypingStop();
+      if (operation) {
+        // Apply operation locally
+        this.content = newContent;
+        
+        // Send to server
+        this.sendOperation(operation);
+        
+        // Update typing status
+        this.setTypingStatus(true);
+        this.scheduleTypingStop();
+      }
+    } catch (error) {
+      console.error("❌ Error handling local input:", error);
+      // Request sync to recover from error
+      this.requestSync();
     }
   }
   
@@ -273,23 +295,11 @@ export class CollaborativeEditor {
     this.channel.push("text_operation", {
       operation: operation
     }).receive("ok", (response) => {
-      // Operation acknowledged
-      console.log("✅ Operation acknowledged by server:", response);
-      this.acknowledged++;
+      console.log("✅ Operation acknowledged by server");
       this.version = response.version;
-
-      // The server may have transformed our operation. We need to adjust our local operations.
-      const serverOperation = response.operation;
-      if (serverOperation) {
-        const originalOperation = this.localOperations[this.localOperations.length - 1];
-        if (JSON.stringify(originalOperation) !== JSON.stringify(serverOperation)) {
-          console.log("Transforming local operations");
-          // Replace the last local operation with the transformed one from the server
-          this.localOperations[this.localOperations.length - 1] = serverOperation;
-        }
-      }
     }).receive("error", (response) => {
       console.error("❌ Operation failed:", response);
+      // Request sync to recover from error
       this.requestSync();
     });
   }
@@ -299,7 +309,7 @@ export class CollaborativeEditor {
   handleRemoteOperation(payload) {
     const { operation, session_id, version } = payload;
     
-    console.log("🔄 HandleRemoteOperation called:", {
+    console.log("📡 Received remote operation:", {
       operation: operation,
       session_id: session_id,
       version: version,
@@ -307,30 +317,24 @@ export class CollaborativeEditor {
     });
     
     if (session_id === this.userId) {
-      console.log("⏸️ Ignoring own operation");
-      return; // Ignore our own operations
+      console.log("⏸️ Ignoring own operation echo");
+      return; // Ignore our own operations echoed back
     }
     
-    // Transform the operation against our pending local operations
-    let transformedOp = operation;
-    for (let localOp of this.localOperations.slice(this.acknowledged)) {
-      transformedOp = this.transformOperation(transformedOp, localOp);
-    }
-    
-    // Apply transformed operation to our content
+    // Apply remote operation directly (server handles transformation)
     const oldContent = this.content;
-    this.content = this.applyOperation(this.content, transformedOp);
+    this.content = this.applyOperation(this.content, operation);
     
-    console.log(`📝 Content updated: "${oldContent}" -> "${this.content}"`);
+    console.log(`📝 Applied remote operation: "${oldContent}" -> "${this.content}"`);
     
-    // Update editor content more carefully to avoid flashing
-    this.updateEditorContent(transformedOp);
+    // Update editor content immediately - no LiveView conflicts anymore
+    this.updateEditorContent(operation);
     
-    // Update version
+    // Update version to match server
     this.version = version;
     
-    // Adjust all user cursor positions
-    this.adjustAllCursors(transformedOp);
+    // Adjust cursor positions for all users
+    this.adjustAllCursors(operation);
   }
   
   applyOperation(content, operation) {
@@ -364,71 +368,37 @@ export class CollaborativeEditor {
     const currentEditorContent = this.editor.value;
     const expectedContent = this.content;
     
-    // If editor content matches our expected content, no update needed
+    // Check if update is needed
     if (currentEditorContent === expectedContent) {
-      console.log("✅ Editor content already matches - no update needed");
+      console.log("✅ Editor content already synchronized");
       return;
     }
     
-    console.log(`📝 Editor content mismatch - Current: "${currentEditorContent}" vs Expected: "${expectedContent}"`);
+    console.log(`📝 Syncing editor content`);
     
+    // Preserve cursor position and focus
     const hadFocus = document.activeElement === this.editor;
     const cursorStart = this.editor.selectionStart;
     const cursorEnd = this.editor.selectionEnd;
     
-    // For typing users, use a more careful approach
-    if (this.isTyping && hadFocus) {
-      // Only delay the update briefly, then force sync
-      setTimeout(() => {
-        if (this.editor.value !== this.content) {
-          console.log("🔄 Delayed sync for typing user");
-          this.forceEditorSync();
-        }
-      }, 100);
-      return;
-    }
-    
-    // Apply the update immediately for non-typing users
-    this.forceEditorSync(operation, cursorStart, cursorEnd, hadFocus);
-  }
-  
-  forceEditorSync(operation = null, cursorStart = null, cursorEnd = null, hadFocus = null) {
-    const currentEditorContent = this.editor.value;
-    const expectedContent = this.content;
-    
-    if (currentEditorContent === expectedContent) {
-      return; // Already in sync
-    }
-    
-    if (hadFocus === null) {
-      hadFocus = document.activeElement === this.editor;
-      cursorStart = this.editor.selectionStart;
-      cursorEnd = this.editor.selectionEnd;
-    }
-    
-    console.log(`🔄 Force syncing editor: "${currentEditorContent}" -> "${expectedContent}"`);
-    
-    // Replace content
+    // Update content
     this.editor.value = expectedContent;
     
-    // Restore cursor position
+    // Restore cursor position if user had focus
     if (hadFocus) {
-      let adjustedStart = cursorStart;
-      let adjustedEnd = cursorEnd;
+      let adjustedStart = this.adjustCursorForOperation(cursorStart, operation);
+      let adjustedEnd = this.adjustCursorForOperation(cursorEnd, operation);
       
-      // If we have the operation that caused this update, adjust cursor accordingly
-      if (operation) {
-        adjustedStart = this.adjustCursorForOperation(cursorStart, operation);
-        adjustedEnd = this.adjustCursorForOperation(cursorEnd, operation);
-      }
-      
-      // Ensure cursor positions are within bounds
+      // Ensure positions are within bounds
       const safeStart = Math.min(Math.max(0, adjustedStart), expectedContent.length);
       const safeEnd = Math.min(Math.max(0, adjustedEnd), expectedContent.length);
       
       this.editor.setSelectionRange(safeStart, safeEnd);
+      this.editor.focus();
     }
   }
+  
+  // Removed forceEditorSync - simplified to single updateEditorContent method
   
   transformOperation(op1, op2) {
     // Enhanced operational transform with better edge case handling
@@ -561,27 +531,37 @@ export class CollaborativeEditor {
   }
   
   adjustCursorForOperation(cursorPos, operation) {
+    if (!operation || cursorPos < 0) return cursorPos;
+    
     switch (operation.type) {
       case 'insert':
-        return cursorPos > operation.position ? 
+        // If cursor is after insertion point, move it right by inserted length
+        return cursorPos >= operation.position ? 
                cursorPos + operation.content.length : cursorPos;
       
       case 'delete':
+        const deleteEnd = operation.position + operation.length;
         if (cursorPos <= operation.position) {
+          // Cursor before deletion - no change
           return cursorPos;
-        } else if (cursorPos <= operation.position + operation.length) {
+        } else if (cursorPos <= deleteEnd) {
+          // Cursor within deleted region - move to deletion start
           return operation.position;
         } else {
+          // Cursor after deletion - move left by deleted length
           return cursorPos - operation.length;
         }
       
       case 'replace':
+        const replaceEnd = operation.position + operation.deletedLength;
         if (cursorPos <= operation.position) {
+          // Cursor before replacement - no change
           return cursorPos;
-        } else if (cursorPos <= operation.position + operation.deletedLength) {
+        } else if (cursorPos <= replaceEnd) {
+          // Cursor within replaced region - move to end of replacement
           return operation.position + operation.content.length;
         } else {
-          // Cursor is after the replaced region - adjust by the difference
+          // Cursor after replacement - adjust by length difference
           const lengthDiff = operation.content.length - operation.deletedLength;
           return cursorPos + lengthDiff;
         }
@@ -828,9 +808,28 @@ export class CollaborativeEditor {
   adjustAllCursors(operation) {
     this.cursors.forEach((cursor, sessionId) => {
       const newPosition = this.adjustCursorForOperation(cursor.position, operation);
+      
+      // Update cursor position if it changed
       if (newPosition !== cursor.position) {
-        cursor.position = newPosition;
-        this.updateUserCursor(cursor);
+        cursor.position = Math.max(0, Math.min(newPosition, this.content.length));
+        
+        // Update selection if it exists
+        if (cursor.selection) {
+          cursor.selection = {
+            start: Math.max(0, Math.min(this.adjustCursorForOperation(cursor.selection.start, operation), this.content.length)),
+            end: Math.max(0, Math.min(this.adjustCursorForOperation(cursor.selection.end, operation), this.content.length))
+          };
+        }
+        
+        // Re-render the cursor with updated position
+        this.updateUserCursor({
+          session_id: sessionId,
+          name: cursor.name,
+          color: cursor.color,
+          position: cursor.position,
+          selection: cursor.selection,
+          typing: cursor.typing || false
+        });
       }
     });
   }
@@ -860,7 +859,7 @@ export class CollaborativeEditor {
     // Force sync editor if content differs
     if (currentEditorContent !== serverContent) {
       console.log(`🚨 Content desync detected! Editor: "${currentEditorContent}" vs Server: "${serverContent}"`);
-      this.forceEditorSync();
+      this.updateEditorContent();
     } else {
       console.log("✅ Content already in sync");
     }
@@ -900,14 +899,7 @@ export class CollaborativeEditor {
     clearTimeout(this.typingTimeout);
     this.typingTimeout = setTimeout(() => {
       this.setTypingStatus(false);
-      // Sync after typing stops to ensure consistency
-      setTimeout(() => {
-        if (this.channel) {
-          console.log("🔄 Post-typing sync check");
-          this.requestSync();
-        }
-      }, 100);
-    }, 300); // Stop typing after 0.3 seconds of inactivity
+    }, 1000); // Stop typing indicator after 1 second of inactivity
   }
   
   destroy() {

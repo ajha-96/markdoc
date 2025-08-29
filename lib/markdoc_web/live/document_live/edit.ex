@@ -114,32 +114,13 @@ defmodule MarkdocWeb.DocumentLive.Edit do
   end
 
   # Handle PubSub messages
+  # Note: Content updates are handled exclusively by Phoenix Channels
+  # LiveView only handles UI-specific events (user presence, save status, etc.)
 
-  def handle_info({:content_updated, new_content, _version}, socket) do
-    # Update document state for preview rendering only
-    # Phoenix Channels handle the actual text sync to editor
-    document = %{socket.assigns.document | content: new_content}
-
-    # Update markdown HTML if in preview mode
-    markdown_html =
-      if socket.assigns.preview_mode in ["split", "preview"] do
-        render_markdown(new_content)
-      else
-        socket.assigns.markdown_html
-      end
-
-    socket =
-      socket
-      |> assign(document: document)
-      |> assign(markdown_html: markdown_html)
-
-    {:noreply, socket}
-  end
-
-  def handle_info({:user_joined, _session_id, user}, socket) do
+  def handle_info({:user_joined, session_id, user}, socket) do
     # Add user to document state
     document = socket.assigns.document
-    updated_users = Map.put(document.users, _session_id, user)
+    updated_users = Map.put(document.users, session_id, user)
     document = %{document | users: updated_users}
 
     socket = assign(socket, document: document)
@@ -147,7 +128,7 @@ defmodule MarkdocWeb.DocumentLive.Edit do
     # Notify client
     {:noreply,
      push_event(socket, "user_joined", %{
-       session_id: _session_id,
+       session_id: session_id,
        user: user
      })}
   end
@@ -205,16 +186,7 @@ defmodule MarkdocWeb.DocumentLive.Edit do
     handle_info({:cursor_updated, session_id, position, selection}, socket)
   end
 
-  def handle_info(
-        %Phoenix.Socket.Broadcast{
-          event: "content_updated",
-          payload: %{content: content, version: version}
-        },
-        socket
-      ) do
-    # Handle PubSub broadcast format for content updates
-    handle_info({:content_updated, content, version}, socket)
-  end
+  # Removed content_updated handler - Phoenix Channels handle all text synchronization
 
   def handle_info(
         %Phoenix.Socket.Broadcast{
@@ -227,16 +199,7 @@ defmodule MarkdocWeb.DocumentLive.Edit do
     handle_info({:save_status, status, timestamp}, socket)
   end
 
-  def handle_info(
-        %Phoenix.Socket.Broadcast{
-          event: "text_operation",
-          payload: %{operation: operation, version: version, session_id: session_id}
-        },
-        socket
-      ) do
-    # Handle PubSub broadcast format for text operations
-    handle_info({:content_updated, operation.content, version}, socket)
-  end
+  # Removed text_operation handler - Phoenix Channels handle all text synchronization exclusively
 
   def handle_info({:cursor_updated, session_id, position, selection}, socket) do
     # Update user cursor position

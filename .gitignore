@@ -35,7 +35,8 @@ markdoc-*.tar
 npm-debug.log
 /assets/node_modules/
 
-/docs
 .kiro/
 .vscode/
+
+storage/
 

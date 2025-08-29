@@ -22,7 +22,6 @@ import "phoenix_html"
 // Establish Phoenix Socket and LiveView configuration.
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
-import topbar from "../vendor/topbar"
 // Import our custom hooks
 import {DocumentEditor, CopyToClipboard} from "./document_editor"
 import {CollaborativeDocumentEditor} from "./collaborative_editor"
@@ -34,10 +33,26 @@ const liveSocket = new LiveSocket("/live", Socket, {
   hooks: {DocumentEditor, CopyToClipboard, CollaborativeDocumentEditor},
 })
 
-// Show progress bar on live navigation and form submits
-topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
-window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
-window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
+// Simple progress indicator instead of topbar
+let loadingIndicator = null;
+
+function showLoading() {
+  if (!loadingIndicator) {
+    loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'fixed top-0 left-0 w-full h-1 bg-blue-500 z-50 animate-pulse';
+    document.body.appendChild(loadingIndicator);
+  }
+}
+
+function hideLoading() {
+  if (loadingIndicator) {
+    loadingIndicator.remove();
+    loadingIndicator = null;
+  }
+}
+
+window.addEventListener("phx:page-loading-start", showLoading)
+window.addEventListener("phx:page-loading-stop", hideLoading)
 
 // connect if there are any LiveViews on the page
 liveSocket.connect()

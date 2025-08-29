@@ -75,25 +75,28 @@ defmodule MarkdocWeb.DocumentChannel do
   def handle_in("text_operation", %{"operation" => operation}, socket) do
     %{document_id: document_id, session_id: session_id} = socket.assigns
 
+    Logger.debug("📨 Received text_operation from #{session_id}: #{inspect(operation)}")
+
     # Apply the text operation
     case apply_text_operation(document_id, session_id, operation) do
-      {:ok, transformed_op, new_version} ->
-        # Broadcast the transformed operation to all other users
-        Logger.debug("🔥 Broadcasting text_operation: #{inspect(transformed_op)} to other users")
+      {:ok, applied_op, new_version} ->
+        # Broadcast the applied operation to all other users (not including sender)
+        Logger.debug("📡 Broadcasting text_operation to other users")
 
         broadcast_from(socket, "text_operation", %{
-          operation: transformed_op,
+          operation: applied_op,
           session_id: session_id,
           version: new_version
         })
 
-        Logger.debug("✅ Broadcasted successfully")
+        Logger.debug("✅ Text operation broadcast completed")
 
-        {:reply, {:ok, %{version: new_version, operation: transformed_op}}, socket}
+        # Acknowledge success to the sender
+        {:reply, {:ok, %{version: new_version, operation: applied_op}}, socket}
 
       {:error, reason} ->
-        Logger.error("Text operation failed: #{inspect(reason)}")
-        {:reply, {:error, %{reason: "Operation failed"}}, socket}
+        Logger.error("❌ Text operation failed: #{inspect(reason)}")
+        {:reply, {:error, %{reason: reason}}, socket}
     end
   end
 
@@ -243,38 +246,37 @@ defmodule MarkdocWeb.DocumentChannel do
 
   # Private helper functions
 
-  defp apply_text_operation(document_id, _session_id, operation) do
-    # Pure in-memory operation application for better performance
-
+  defp apply_text_operation(document_id, session_id, operation) do
+    # Apply text operation and update document state
     with {:ok, document} <- Documents.get_document(document_id) do
-      # Parse the operation
       case parse_operation(operation) do
         {:ok, parsed_op} ->
           Logger.debug(
-            "📝 Applying #{parsed_op.type} at pos #{parsed_op.position} - content len: #{String.length(document.content)}"
+            "📝 Applying #{parsed_op.type} at pos #{parsed_op.position} from user #{session_id}"
           )
 
           # Apply operation to document content
           case Operations.apply_operation(document.content, parsed_op) do
             {:ok, new_content} ->
-              Logger.debug("✅ Operation success - new len: #{String.length(new_content)}")
+              Logger.debug("✅ Operation applied successfully")
 
-              # Update document in memory only (no disk sync during active editing)
+              # Update document content in DocumentManager
               :ok = Documents.update_document_content(document_id, new_content)
 
-              # Return success with new version
-              {:ok, parsed_op, document.version + 1}
+              # Get updated document to get new version
+              {:ok, updated_document} = Documents.get_document(document_id)
+              new_version = updated_document.version + 1
+
+              # Return the operation for broadcasting to other users
+              {:ok, parsed_op, new_version}
 
             {:error, reason} ->
-              Logger.error(
-                "❌ Operation failed: #{inspect(reason)} for #{parsed_op.type} at #{parsed_op.position}"
-              )
-
+              Logger.error("❌ Operation failed: #{inspect(reason)}")
               {:error, reason}
           end
 
         {:error, reason} ->
-          Logger.error("❌ Operation parse failed: #{inspect(reason)}")
+          Logger.error("❌ Operation parsing failed: #{inspect(reason)}")
           {:error, reason}
       end
     end

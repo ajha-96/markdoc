@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "name": "markdoc-assets",
+  "version": "1.0.0",
+  "description": "Frontend assets for Markdoc collaborative editor"
+}
