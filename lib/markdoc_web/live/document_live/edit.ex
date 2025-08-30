@@ -41,13 +41,14 @@ defmodule MarkdocWeb.DocumentLive.Edit do
               document: document,
               user_name: user_name,
               session_id: session_id,
-              page_title: "Editing Document",
+              page_title: document.title,
               save_status: "saved",
               last_saved: document.last_saved,
               show_share_modal: false,
               share_url: url(socket, ~p"/documents/#{document_id}"),
               # "editor", "split", "preview"
-              preview_mode: preview_mode
+              preview_mode: preview_mode,
+              title_form: to_form(%{"title" => document.title})
             )
 
           {:ok, socket}
@@ -114,6 +115,22 @@ defmodule MarkdocWeb.DocumentLive.Edit do
     end
   end
 
+  def handle_event("validate_title", %{"title" => %{"title" => title}}, socket) do
+    form = to_form(%{"title" => title})
+    {:noreply, assign(socket, title_form: form)}
+  end
+
+  def handle_event("update_title", %{"title" => %{"title" => title}}, socket) do
+    # Update the document in the current process
+    updated_doc = %{socket.assigns.document | title: title}
+    socket = assign(socket, document: updated_doc)
+
+    # Send to the document manager to update state and save
+    Documents.update_title(socket.assigns.document_id, title)
+
+    {:noreply, socket}
+  end
+
   def handle_event("toggle_preview", %{"mode" => mode}, socket) do
     # Client-side rendering handles markdown HTML updates
 
@@ -135,6 +152,18 @@ defmodule MarkdocWeb.DocumentLive.Edit do
   # Handle PubSub messages
   # Note: Content updates are handled exclusively by Phoenix Channels
   # LiveView only handles UI-specific events (user presence, save status, etc.)
+  def handle_info({:title_updated, new_title}, socket) do
+    updated_doc = %{socket.assigns.document | title: new_title}
+
+    socket =
+      assign(socket,
+        document: updated_doc,
+        page_title: new_title,
+        title_form: to_form(%{"title" => new_title})
+      )
+
+    {:noreply, socket}
+  end
 
   def handle_info({:user_joined, session_id, user}, socket) do
     # Add user to document state
@@ -310,9 +339,18 @@ defmodule MarkdocWeb.DocumentLive.Edit do
       <!-- Header -->
       <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div class="flex items-center space-x-4">
-          <h1 class="text-xl font-semibold text-gray-900">Document</h1>
+          <div>
+            <.form for={@title_form} phx-change="validate_title" phx-submit="update_title">
+              <.input
+                field={@title_form[:title]}
+                placeholder="Enter title..."
+                class="text-xl font-semibold text-gray-900 !border-none !ring-0 !focus:ring-0 p-0"
+                phx-debounce="500"
+              />
+            </.form>
+          </div>
 
-    <!-- Save Status -->
+          <!-- Save Status -->
           <div class="flex items-center space-x-2">
             <%= case @save_status do %>
               <% "saving" -> %>

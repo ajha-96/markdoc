@@ -87,6 +87,14 @@ defmodule Markdoc.Documents.DocumentManager do
   end
 
   @doc """
+  Updates the document title.
+  """
+  @spec update_title(binary(), binary()) :: :ok
+  def update_title(document_id, new_title) do
+    GenServer.cast(via_tuple(document_id), {:update_title, new_title})
+  end
+
+  @doc """
   Forces an immediate save to disk.
   """
   @spec save_now(binary()) :: :ok | {:error, term()}
@@ -131,10 +139,10 @@ defmodule Markdoc.Documents.DocumentManager do
 
     # Load document from file system or create new one
     document =
-      case FileStore.load_document(document_id) do
-        {:ok, content} ->
-          Document.new(document_id, content)
-
+      with {:ok, content} <- FileStore.load_document(document_id),
+           {:ok, title} <- FileStore.load_title(document_id) do
+        Document.new(document_id, content, title)
+      else
         {:error, :not_found} ->
           # Create new document
           initial_content = "# New Document\n\nStart writing..."
@@ -244,6 +252,13 @@ defmodule Markdoc.Documents.DocumentManager do
   end
 
   @impl true
+  def handle_cast({:update_title, new_title}, document) do
+    updated_document = Document.update_title(document, new_title)
+    broadcast_title_updated(updated_document)
+    {:noreply, updated_document}
+  end
+
+  @impl true
   def handle_info(:auto_save, document) do
     updated_document =
       if document.dirty do
@@ -320,22 +335,29 @@ defmodule Markdoc.Documents.DocumentManager do
   end
 
   defp save_to_disk(document) do
-    FileStore.save_document(document.id, document.content)
+    with :ok <- FileStore.save_document(document.id, document.content),
+         :ok <- FileStore.save_title(document.id, document.title) do
+      :ok
+    else
+      error -> error
+    end
   end
 
   defp reload_from_disk(document) do
-    case FileStore.load_document(document.id) do
-      {:ok, content} ->
-        # Preserve user state but update content from disk
-        fresh_document = %{
-          document
-          | content: content,
-            dirty: false,
-            last_saved: get_file_modified_time(document.id)
-        }
+    with {:ok, content} <- FileStore.load_document(document.id),
+         {:ok, title} <- FileStore.load_title(document.id) do
+      # Preserve user state but update content from disk
+      fresh_document = %{
+        document
+        | content: content,
+          title: title,
+          dirty: false,
+          last_saved: get_file_modified_time(document.id)
+      }
 
-        {:ok, fresh_document}
+      {:ok, fresh_document}
 
+    else
       {:error, reason} ->
         {:error, reason}
     end
@@ -402,6 +424,14 @@ defmodule Markdoc.Documents.DocumentManager do
       Markdoc.PubSub,
       "document:#{document.id}",
       {:save_status, status, document.last_saved}
+    )
+  end
+
+  defp broadcast_title_updated(document) do
+    Phoenix.PubSub.broadcast(
+      Markdoc.PubSub,
+      "document:#{document.id}",
+      {:title_updated, document.title}
     )
   end
 end

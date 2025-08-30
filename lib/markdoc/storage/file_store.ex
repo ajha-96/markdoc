@@ -30,6 +30,66 @@ defmodule Markdoc.Storage.FileStore do
   end
 
   @doc """
+  Loads a document's title from the file system.
+  If no title file is found, returns the default title.
+  """
+  @spec load_title(binary()) :: {:ok, binary()} | {:error, term()}
+  def load_title(document_id) do
+    title_path = title_file_path(document_id)
+
+    case File.read(title_path) do
+      {:ok, title} ->
+        Logger.debug("Loaded title for document: #{document_id}")
+        {:ok, String.trim(title)}
+
+      {:error, :enoent} ->
+        Logger.debug("No title file found for document: #{document_id}. Using default.")
+        {:ok, "New Document"}
+
+      {:error, reason} = error ->
+        Logger.error("Failed to load title for document #{document_id}: #{inspect(reason)}")
+        error
+    end
+  end
+
+  @doc """
+  Saves a document's title to the file system.
+  If the title is the default, the title file is removed.
+  """
+  @spec save_title(binary(), binary()) :: :ok | {:error, term()}
+  def save_title(document_id, "New Document") do
+    title_path = title_file_path(document_id)
+
+    if File.exists?(title_path) do
+      case File.rm(title_path) do
+        :ok ->
+          Logger.debug("Removed title file for document: #{document_id}")
+          :ok
+
+        {:error, reason} = error ->
+          Logger.error("Failed to remove title file for document #{document_id}: #{inspect(reason)}")
+          error
+      end
+    else
+      :ok
+    end
+  end
+
+  def save_title(document_id, title) do
+    title_path = title_file_path(document_id)
+
+    case File.write(title_path, title) do
+      :ok ->
+        Logger.debug("Saved title for document: #{document_id}")
+        :ok
+
+      {:error, reason} = error ->
+        Logger.error("Failed to save title for document #{document_id}: #{inspect(reason)}")
+        error
+    end
+  end
+
+  @doc """
   Loads a document's content from the file system.
   """
   @spec load_document(binary()) :: {:ok, binary()} | {:error, :not_found} | {:error, term()}
@@ -156,6 +216,14 @@ defmodule Markdoc.Storage.FileStore do
   @spec document_file_path(binary()) :: Path.t()
   def document_file_path(document_id) do
     Path.join([document_directory(document_id), "document.md"])
+  end
+
+  @doc """
+  Gets the file path for a document's title file.
+  """
+  @spec title_file_path(binary()) :: Path.t()
+  def title_file_path(document_id) do
+    Path.join([document_directory(document_id), "title.txt"])
   end
 
   @doc """
