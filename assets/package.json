@@ -2,5 +2,8 @@
   "type": "module",
   "name": "markdoc-assets",
   "version": "1.0.0",
-  "description": "Frontend assets for Markdoc collaborative editor"
+  "description": "Frontend assets for Markdoc collaborative editor",
+  "dependencies": {
+    "markdown-it": "^14.1.0"
+  }
 }

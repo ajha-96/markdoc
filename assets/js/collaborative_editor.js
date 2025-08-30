@@ -9,6 +9,7 @@
  */
 
 import {Socket} from "phoenix"
+import {MarkdownPreview} from './markdown_preview.js'
 
 export class CollaborativeEditor {
   constructor(element, documentId, userId, userName) {
@@ -30,6 +31,9 @@ export class CollaborativeEditor {
     // UI elements
     this.cursors = new Map();
     this.setupCursorOverlay();
+    
+    // Initialize markdown preview for real-time rendering
+    this.initializeMarkdownPreview();
     
     // Operational transform state
     this.localOperations = [];
@@ -213,6 +217,9 @@ export class CollaborativeEditor {
         // Apply operation locally
         this.content = newContent;
         
+        // Update preview in real-time
+        this.updatePreview();
+        
         // Send to server
         this.sendOperation(operation);
         
@@ -324,6 +331,9 @@ export class CollaborativeEditor {
     // Apply remote operation directly (server handles transformation)
     const oldContent = this.content;
     this.content = this.applyOperation(this.content, operation);
+    
+    // Update preview after remote changes
+    this.updatePreview();
     
     console.log(`📝 Applied remote operation: "${oldContent}" -> "${this.content}"`);
     
@@ -856,6 +866,9 @@ export class CollaborativeEditor {
     this.content = serverContent;
     this.version = state.version || 0;
     
+    // Update preview after sync
+    this.updatePreview();
+    
     // Force sync editor if content differs
     if (currentEditorContent !== serverContent) {
       console.log(`🚨 Content desync detected! Editor: "${currentEditorContent}" vs Server: "${serverContent}"`);
@@ -902,6 +915,38 @@ export class CollaborativeEditor {
     }, 1000); // Stop typing indicator after 1 second of inactivity
   }
   
+  // Markdown Preview Methods
+  initializeMarkdownPreview() {
+    // Find preview elements in split and preview modes
+    this.previewElement = document.getElementById('markdown-preview');
+    this.previewFullElement = document.getElementById('markdown-preview-full');
+    
+    if (this.previewElement || this.previewFullElement) {
+      // Initialize markdown preview instances
+      if (this.previewElement) {
+        this.markdownPreview = new MarkdownPreview(this.previewElement);
+      }
+      if (this.previewFullElement) {
+        this.markdownPreviewFull = new MarkdownPreview(this.previewFullElement);
+      }
+      
+      // Initial render
+      this.updatePreview();
+      
+      console.log("🎨 Real-time markdown preview initialized");
+    }
+  }
+  
+  updatePreview() {
+    // Update both preview elements if they exist
+    if (this.markdownPreview) {
+      this.markdownPreview.updatePreview(this.content);
+    }
+    if (this.markdownPreviewFull) {
+      this.markdownPreviewFull.updatePreview(this.content);
+    }
+  }
+  
   destroy() {
     clearTimeout(this.typingTimeout);
     clearTimeout(this.cursorUpdateTimeout);
@@ -915,6 +960,16 @@ export class CollaborativeEditor {
     }
     if (this.cursorOverlay) {
       this.cursorOverlay.innerHTML = '';
+    }
+    
+    // Clean up markdown preview instances
+    if (this.markdownPreview) {
+      this.markdownPreview.clearPreview();
+      this.markdownPreview = null;
+    }
+    if (this.markdownPreviewFull) {
+      this.markdownPreviewFull.clearPreview();
+      this.markdownPreviewFull = null;
     }
   }
 

@@ -23,14 +23,15 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 // Import our custom hooks
-import {DocumentEditor, CopyToClipboard} from "./document_editor"
+import {DocumentEditor, CopyToClipboard, MarkdownPreviewHook, DocumentEditorWithPreview} from "./document_editor"
 import {CollaborativeDocumentEditor} from "./collaborative_editor"
+import {MarkdownToolbarHook} from "./markdown_toolbar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {DocumentEditor, CopyToClipboard, CollaborativeDocumentEditor},
+  hooks: {DocumentEditor, CopyToClipboard, CollaborativeDocumentEditor, MarkdownToolbar: MarkdownToolbarHook, MarkdownPreview: MarkdownPreviewHook, DocumentEditorWithPreview},
 })
 
 // Simple progress indicator instead of topbar

@@ -13,10 +13,16 @@ defmodule MarkdocWeb.DocumentLive.Edit do
 
   alias Markdoc.Documents
   alias Phoenix.PubSub
+  
+  import MarkdocWeb.ToolbarComponents
 
   def mount(%{"id" => document_id} = params, _session, socket) do
     user_name = Map.get(params, "user_name")
     session_id = Map.get(params, "session_id")
+    # Get preview mode from URL params, default to "editor"
+    initial_mode = Map.get(params, "mode", "editor")
+    # Validate mode is one of the allowed values
+    preview_mode = if initial_mode in ["editor", "split", "preview"], do: initial_mode, else: "editor"
 
     # Redirect to landing page if no user session
     if is_nil(user_name) or is_nil(session_id) do
@@ -41,8 +47,7 @@ defmodule MarkdocWeb.DocumentLive.Edit do
               show_share_modal: false,
               share_url: url(socket, ~p"/documents/#{document_id}"),
               # "editor", "split", "preview"
-              preview_mode: "editor",
-              markdown_html: render_markdown(document.content)
+              preview_mode: preview_mode
             )
 
           {:ok, socket}
@@ -56,6 +61,19 @@ defmodule MarkdocWeb.DocumentLive.Edit do
           {:ok, socket}
       end
     end
+  end
+
+  def handle_params(params, _url, socket) do
+    # Handle URL parameter changes (like mode changes from push_patch)
+    mode = Map.get(params, "mode", socket.assigns.preview_mode)
+    
+    # Validate mode is one of the allowed values
+    preview_mode = if mode in ["editor", "split", "preview"], do: mode, else: "editor"
+    
+    # Client-side rendering handles markdown HTML updates
+    socket = assign(socket, preview_mode: preview_mode)
+    
+    {:noreply, socket}
   end
 
   # Removed cursor/typing events - Phoenix Channels handle all user interactions
@@ -97,18 +115,19 @@ defmodule MarkdocWeb.DocumentLive.Edit do
   end
 
   def handle_event("toggle_preview", %{"mode" => mode}, socket) do
-    # Update markdown HTML when switching to preview modes
-    markdown_html =
-      if mode in ["split", "preview"] do
-        render_markdown(socket.assigns.document.content)
-      else
-        socket.assigns.markdown_html
-      end
+    # Client-side rendering handles markdown HTML updates
+
+    # Update URL to include mode parameter for persistence
+    current_params = %{
+      "user_name" => socket.assigns.user_name,
+      "session_id" => socket.assigns.session_id,
+      "mode" => mode
+    }
 
     socket =
       socket
       |> assign(preview_mode: mode)
-      |> assign(markdown_html: markdown_html)
+      |> push_patch(to: ~p"/documents/#{socket.assigns.document_id}/edit?#{current_params}")
 
     {:noreply, socket}
   end
@@ -199,7 +218,17 @@ defmodule MarkdocWeb.DocumentLive.Edit do
     handle_info({:save_status, status, timestamp}, socket)
   end
 
-  # Removed text_operation handler - Phoenix Channels handle all text synchronization exclusively
+  # Handle text_operation broadcasts - client-side rendering handles preview updates
+  def handle_info(
+        %Phoenix.Socket.Broadcast{
+          event: "text_operation",
+          payload: _payload
+        },
+        socket
+      ) do
+    # No server-side processing needed - client handles markdown rendering
+    {:noreply, socket}
+  end
 
   def handle_info({:cursor_updated, session_id, position, selection}, socket) do
     # Update user cursor position
@@ -274,13 +303,6 @@ defmodule MarkdocWeb.DocumentLive.Edit do
     end
   end
 
-  # Helper function for markdown rendering
-  defp render_markdown(content) do
-    case Earmark.as_html(content) do
-      {:ok, html, _} -> html
-      {:error, _html, _errors} -> "<p>Error rendering markdown</p>"
-    end
-  end
 
   def render(assigns) do
     ~H"""
@@ -468,43 +490,58 @@ defmodule MarkdocWeb.DocumentLive.Edit do
         <%= cond do %>
           <% @preview_mode == "editor" -> %>
             <!-- Editor Only Mode -->
-            <div class="flex-1 relative">
-              <textarea
-                id="editor"
-                name="content"
-                phx-hook="CollaborativeDocumentEditor"
-                data-document-id={@document_id}
-                data-user-id={@session_id}
-                data-user-name={@user_name}
-                class="w-full h-full p-6 text-gray-900 resize-none focus:outline-none font-mono text-sm leading-relaxed"
-                placeholder="Start writing your markdown here..."
-                spellcheck="false"
-              ><%= @document.content %></textarea>
+            <div class="flex-1 flex flex-col">
+              <!-- Markdown Toolbar -->
+              <.markdown_toolbar target_id="editor" />
+              
+              <!-- Mobile Toolbar -->
+              <.compact_toolbar target_id="editor" />
+              
+              <div class="flex-1 relative">
+                <textarea
+                  id="editor"
+                  name="content"
+                  phx-hook="CollaborativeDocumentEditor"
+                  data-document-id={@document_id}
+                  data-user-id={@session_id}
+                  data-user-name={@user_name}
+                  class="w-full h-full p-6 text-gray-900 resize-none focus:outline-none font-mono text-sm leading-relaxed border-0 rounded-t-none"
+                  placeholder="Start writing your markdown here..."
+                  spellcheck="false"
+                ><%= @document.content %></textarea>
 
-    <!-- Cursor Overlays (will be managed by JavaScript) -->
-              <div id="cursor-overlays" class="absolute inset-0 pointer-events-none"></div>
+        <!-- Cursor Overlays (will be managed by JavaScript) -->
+                <div id="cursor-overlays" class="absolute inset-0 pointer-events-none"></div>
+              </div>
             </div>
           <% @preview_mode == "split" -> %>
             <!-- Split Pane Mode -->
             <!-- Editor Pane -->
-            <div class="flex-1 relative border-r border-gray-200">
-              <div class="absolute top-0 left-0 w-full bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-medium text-gray-700 uppercase tracking-wider">
+            <div class="flex-1 flex flex-col border-r border-gray-200">
+              <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-medium text-gray-700 uppercase tracking-wider">
                 Markdown Editor
               </div>
-              <textarea
-                id="editor"
-                name="content"
-                phx-hook="CollaborativeDocumentEditor"
-                data-document-id={@document_id}
-                data-user-id={@session_id}
-                data-user-name={@user_name}
-                class="w-full h-full pt-10 p-6 text-gray-900 resize-none focus:outline-none font-mono text-sm leading-relaxed"
-                placeholder="Start writing your markdown here..."
-                spellcheck="false"
-              ><%= @document.content %></textarea>
+              
+              <!-- Markdown Toolbar for Split Mode -->
+              <.markdown_toolbar target_id="editor" class="hidden md:flex" />
+              <.compact_toolbar target_id="editor" />
+              
+              <div class="flex-1 relative">
+                <textarea
+                  id="editor"
+                  name="content"
+                  phx-hook="CollaborativeDocumentEditor"
+                  data-document-id={@document_id}
+                  data-user-id={@session_id}
+                  data-user-name={@user_name}
+                  class="w-full h-full p-6 text-gray-900 resize-none focus:outline-none font-mono text-sm leading-relaxed border-0 rounded-t-none"
+                  placeholder="Start writing your markdown here..."
+                  spellcheck="false"
+                ><%= @document.content %></textarea>
 
-    <!-- Cursor Overlays (will be managed by JavaScript) -->
-              <div id="cursor-overlays" class="absolute inset-0 mt-10 pointer-events-none"></div>
+        <!-- Cursor Overlays (will be managed by JavaScript) -->
+                <div id="cursor-overlays" class="absolute inset-0 pointer-events-none"></div>
+              </div>
             </div>
 
     <!-- Preview Pane -->
@@ -513,8 +550,13 @@ defmodule MarkdocWeb.DocumentLive.Edit do
                 Live Preview
               </div>
               <div class="h-full pt-10 p-6 overflow-y-auto">
-                <div class="markdown-preview prose prose-slate max-w-none">
-                  {raw(@markdown_html)}
+                <div 
+                  id="markdown-preview" 
+                  class="markdown-preview prose prose-slate max-w-none"
+                  phx-hook="MarkdownPreview"
+                  data-content={@document.content}
+                >
+                  <!-- Client-side rendered content will appear here -->
                 </div>
               </div>
             </div>
@@ -522,8 +564,13 @@ defmodule MarkdocWeb.DocumentLive.Edit do
             <!-- Preview Only Mode -->
             <div class="flex-1 relative bg-gray-50">
               <div class="h-full p-6 overflow-y-auto">
-                <div class="markdown-preview prose prose-slate max-w-none mx-auto">
-                  {raw(@markdown_html)}
+                <div 
+                  id="markdown-preview-full" 
+                  class="markdown-preview prose prose-slate max-w-none mx-auto"
+                  phx-hook="MarkdownPreview"
+                  data-content={@document.content}
+                >
+                  <!-- Client-side rendered content will appear here -->
                 </div>
               </div>
             </div>

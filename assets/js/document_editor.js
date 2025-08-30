@@ -8,6 +8,8 @@
  * - Typing indicators
  */
 
+import { MarkdownPreview } from './markdown_preview.js';
+
 export const DocumentEditor = {
   mounted() {
     this.editor = this.el;
@@ -344,5 +346,187 @@ export const CopyToClipboard = {
         });
       }
     });
+  }
+};
+
+/**
+ * MarkdownPreviewHook LiveView Hook
+ * 
+ * Handles client-side markdown preview rendering:
+ * - Real-time markdown to HTML conversion
+ * - No server roundtrips for preview updates
+ * - Efficient client-side processing
+ */
+export const MarkdownPreviewHook = {
+  mounted() {
+    // Initialize markdown preview
+    this.markdownPreview = new MarkdownPreview(this.el);
+    
+    // Get initial content from data attribute or editor
+    const initialContent = this.el.dataset.content || '';
+    this.markdownPreview.updatePreview(initialContent);
+    
+    console.log("🎨 MarkdownPreview hook mounted with client-side rendering");
+  },
+  
+  updated() {
+    // Handle content updates from LiveView
+    const content = this.el.dataset.content || '';
+    this.markdownPreview.updatePreview(content);
+  },
+  
+  /**
+   * Public method to update preview content
+   * Can be called from other hooks or external code
+   */
+  updateContent(content) {
+    if (this.markdownPreview) {
+      this.markdownPreview.updatePreview(content);
+    }
+  },
+  
+  destroyed() {
+    // Cleanup if needed
+    if (this.markdownPreview) {
+      this.markdownPreview.clearPreview();
+      this.markdownPreview = null;
+    }
+  }
+};
+
+/**
+ * DocumentEditorWithPreview LiveView Hook
+ * 
+ * Enhanced version of DocumentEditor that includes real-time markdown preview
+ */
+export const DocumentEditorWithPreview = {
+  mounted() {
+    // Initialize base editor functionality
+    this.editor = this.el;
+    this.cursors = new Map();
+    this.lastContent = this.editor.value;
+    this.typing = false;
+    this.typingTimeout = null;
+    
+    // Find preview element and initialize markdown preview
+    this.previewElement = document.getElementById('markdown-preview');
+    if (this.previewElement) {
+      this.markdownPreview = new MarkdownPreview(this.previewElement);
+      // Initial preview render
+      this.markdownPreview.updatePreview(this.editor.value);
+      console.log("🎨 Client-side markdown preview initialized");
+    }
+    
+    this.setupEventListeners();
+    this.initializeCursorTracking();
+  },
+  
+  setupEventListeners() {
+    // Content changes
+    this.editor.addEventListener('input', (e) => {
+      this.handleContentChange(e);
+    });
+    
+    // Real-time preview updates on input
+    this.editor.addEventListener('input', (e) => {
+      if (this.markdownPreview) {
+        this.markdownPreview.updatePreview(this.editor.value);
+      }
+    });
+    
+    // Cursor/selection changes
+    this.editor.addEventListener('selectionchange', () => {
+      this.handleSelectionChange();
+    });
+    
+    // Keyboard events for special keys
+    this.editor.addEventListener('keydown', (e) => {
+      // Ctrl+S to save
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        this.pushEvent('save_now', {});
+      }
+    });
+    
+    // Focus/blur events
+    this.editor.addEventListener('focus', () => {
+      this.updateTypingStatus(false);
+    });
+    
+    this.editor.addEventListener('blur', () => {
+      this.updateTypingStatus(false);
+    });
+  },
+  
+  // Copy all other methods from DocumentEditor
+  initializeCursorTracking() {
+    if (!document.getElementById('cursor-overlays')) {
+      const overlay = document.createElement('div');
+      overlay.id = 'cursor-overlays';
+      overlay.className = 'absolute inset-0 pointer-events-none';
+      this.editor.parentElement.appendChild(overlay);
+    }
+    this.cursorOverlay = document.getElementById('cursor-overlays');
+  },
+  
+  handleContentChange(e) {
+    const newContent = this.editor.value;
+    
+    if (newContent !== this.lastContent) {
+      this.lastContent = newContent;
+      
+      this.pushEvent('content_changed', {
+        content: newContent
+      });
+      
+      this.updateTypingStatus(true);
+    }
+  },
+  
+  handleSelectionChange() {
+    if (document.activeElement === this.editor) {
+      const start = this.editor.selectionStart;
+      const end = this.editor.selectionEnd;
+      
+      if (start === end) {
+        this.pushEvent('cursor_moved', {
+          position: start
+        });
+      } else {
+        this.pushEvent('selection_changed', {
+          start: start,
+          end: end
+        });
+      }
+    }
+  },
+  
+  updateTypingStatus(isTyping) {
+    if (this.typing !== isTyping) {
+      this.typing = isTyping;
+      
+      if (isTyping) {
+        this.pushEvent('typing_started', {});
+        
+        clearTimeout(this.typingTimeout);
+        this.typingTimeout = setTimeout(() => {
+          this.updateTypingStatus(false);
+        }, 3000);
+      } else {
+        this.pushEvent('typing_stopped', {});
+        clearTimeout(this.typingTimeout);
+      }
+    }
+  },
+  
+  destroyed() {
+    clearTimeout(this.typingTimeout);
+    if (this.cursorOverlay) {
+      this.cursorOverlay.innerHTML = '';
+    }
+    if (this.markdownPreview) {
+      this.markdownPreview.clearPreview();
+      this.markdownPreview = null;
+    }
   }
 };
