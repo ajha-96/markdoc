@@ -447,6 +447,13 @@ defmodule MarkdocWeb.DocumentLive.Edit do
             Save
           </button>
 
+          <a
+            href={~p"/documents/#{@document_id}/download"}
+            target="_blank"
+            class="px-3 py-1 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700"
+          >
+            Download
+          </a>
           <button
             phx-click="show_share_modal"
             class="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"

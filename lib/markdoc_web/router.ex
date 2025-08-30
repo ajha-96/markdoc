@@ -25,6 +25,8 @@ defmodule MarkdocWeb.Router do
 
     # Document editor
     live "/documents/:id/edit", DocumentLive.Edit, :edit
+
+    get "/documents/:id/download", DocumentController, :download
   end
 
   # Other scopes may use custom stacks.
