@@ -137,6 +137,18 @@ defmodule Markdoc.Documents do
   end
 
   @doc """
+  Updates a document's title.
+  """
+  @spec update_title(binary(), binary()) :: :ok | {:error, term()}
+  def update_title(document_id, new_title) do
+    if DocumentManager.running?(document_id) do
+      DocumentManager.update_title(document_id, new_title)
+    else
+      {:error, :document_not_active}
+    end
+  end
+
+  @doc """
   Updates a user's cursor position.
   """
   @spec update_cursor_position(binary(), binary(), integer(), map() | nil) :: :ok

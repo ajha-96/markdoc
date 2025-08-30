@@ -18,6 +18,7 @@ defmodule Markdoc.Documents.Document do
 
   @type t :: %__MODULE__{
           id: binary(),
+          title: binary(),
           content: binary(),
           users: %{binary() => user_state()},
           version: integer(),
@@ -27,6 +28,7 @@ defmodule Markdoc.Documents.Document do
 
   defstruct [
     :id,
+    title: "New Document",
     content: "# New Document\n\nStart writing...",
     users: %{},
     version: 0,
@@ -41,6 +43,19 @@ defmodule Markdoc.Documents.Document do
   def new(id) do
     %__MODULE__{
       id: id,
+      last_saved: DateTime.utc_now()
+    }
+  end
+
+  @doc """
+  Creates a new document with the given ID, content, and title.
+  """
+  @spec new(binary(), binary(), binary()) :: t()
+  def new(id, content, title) do
+    %__MODULE__{
+      id: id,
+      content: content,
+      title: title,
       last_saved: DateTime.utc_now()
     }
   end
@@ -123,8 +138,16 @@ defmodule Markdoc.Documents.Document do
   Updates the document content and marks it as dirty.
   """
   @spec update_content(t(), binary()) :: t()
-  def update_content(%__MODULE__{} = doc, new_content) do
+  def update_content(%__MODULE_{} = doc, new_content) do
     %{doc | content: new_content, version: doc.version + 1, dirty: true}
+  end
+
+  @doc """
+  Updates the document title and marks it as dirty.
+  """
+  @spec update_title(t(), binary()) :: t()
+  def update_title(%__MODULE__{} = doc, new_title) do
+    %{doc | title: new_title, dirty: true}
   end
 
   @doc """
@@ -154,6 +177,7 @@ defmodule Markdoc.Documents.Document do
   def to_map(%__MODULE__{} = doc) do
     %{
       id: doc.id,
+      title: doc.title,
       content: doc.content,
       users: doc.users,
       version: doc.version,
